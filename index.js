@@ -1,5 +1,8 @@
 //importing the express js module into application
 const express = require('express')
+const path = require('path');
+const userRoutes = require('./routes/userRouters'
+)
 
 //initializing the app using the express
 const app = express();
@@ -7,10 +10,16 @@ const app = express();
 //To parse JSON request bodies
 app.use(express.json());
 
-let users = [
-  {id: 1, name: "Raul", email: "raul@gmail.com"},
-  {id: 2, name: "Monica", email: "monica@yahoo.com"}
-];
+// Set EJS as the view engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+//Routes
+app.use('/users', userRoutes);
+
 
 let posts = [
   { id: 1, title: "Post 1", content: "This is the first post", userId: 1},
@@ -21,6 +30,9 @@ let comments = [
   {id: 1, text: "Super post", userId: 1, userId: 2},
   {id: 2, text: "Thanks for sharing", userId: 1, userId: 2}
 ];
+
+// Middleware
+app.use(express.static(path.join(__dirname, 'public')));
 
 function logger(req, res, next){
   console.log(`${req.method} request for '${req.url}'`);
@@ -41,42 +53,21 @@ const errorHandling = (err, req, res, next) => {
 app.use(logger);
 app.use(customHeader);
 
-app.get("/", (req, res)=>{
-  console.log('Home page')
-  res.send("Home Page")
-})
 
-app.get('/users', (req, res) =>{
-  console.log("User Page")
-  res.send('User Page')
-})
-
-app.get('/users/:id', (req, res) =>{
-  const user = users.find(u => u.id === parseInt(req.params.id));
-  if(!users){
-    const error = new Error('User not found');
-    return next(error);
-  }
-  res.json(user)
-})
-//create a new user
-app.post('/users', (req, res, next) => {
-  const {name, email} = req.body;
-  if(!name || !email){
-    return res.status(400).json({error: 'Name and email are required'})
-  }
-  const newUser ={
-    id: users.length +1,
-    name,
-    email
-  };
-  users.push(newUser);
-  res.status(201).json(newUser)
-});
-
+// GET all posts with optional user filtering
 app.get('/posts', (req, res) => {
-  res.json(posts)
-})
+  const { userId } = req.query;
+  let filteredPosts = [...posts];
+
+  if (userId) {
+    filteredPosts = filteredPosts.filter(post => post.userId === parseInt(userId));
+  }
+
+  const postsWithUser = filteredPosts.map(post => {
+    const user = users.find(u => u.id === post.userId);
+    return { ...post, user };
+  });
+  res.json(postsWithUser);})
 
 app.get('/posts/:id', (req, res, next) =>{
   const post = posts.find(p => p.id === parseInt(req.params.id));
@@ -100,14 +91,23 @@ if (postComments.length === 0) {
 res.json(postComments);
 });
 
+// Update a post (PATCH)
+app.patch('/posts/:id', (req, res, next) => {
+  const postId = parseInt(req.params.id);
+  const postIndex = posts.findIndex(p => p.id === postId);
+  if (postIndex === -1) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+  const updates = req.body;
+  posts[postIndex] = { ...posts[postIndex], ...updates };
+  res.json(posts[postIndex]);
+});
 
 app.get('/error', (req, res, next) => {
   const error = new Error('This is an intentional error');
   next(error)
 })
 app.use(errorHandling)
-
-
 
 app.listen(3000, () => {
   console.log("Server has started!");
